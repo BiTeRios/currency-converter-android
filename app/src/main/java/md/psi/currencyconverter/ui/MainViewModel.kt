@@ -12,6 +12,7 @@ import md.psi.currencyconverter.data.BnmApi
 import md.psi.currencyconverter.data.LatestRates
 import md.psi.currencyconverter.data.NoRatesException
 import md.psi.currencyconverter.data.RateCacheStore
+import md.psi.currencyconverter.data.RateHistory
 import md.psi.currencyconverter.data.RatesRepository
 import md.psi.currencyconverter.domain.AmountCheck
 import md.psi.currencyconverter.domain.AmountInput
@@ -33,6 +34,20 @@ data class ConverterState(
     val inputError: String? = null,
 )
 
+/** Периоды экранов сравнения. */
+enum class Period(val days: Int, val title: String) {
+    WEEK(7, "Неделя"),
+    MONTH(30, "Месяц"),
+}
+
+data class AnalyticsState(
+    val loading: Boolean = false,
+    val history: RateHistory? = null,
+    /** День, на котором заканчивается загруженный период. */
+    val endDate: LocalDate? = null,
+    val error: String? = null,
+)
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = RatesRepository(
@@ -43,9 +58,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _converter = MutableStateFlow(ConverterState())
     val converter: StateFlow<ConverterState> = _converter.asStateFlow()
 
+    private val _analytics = MutableStateFlow(Period.entries.associateWith { AnalyticsState() })
+    val analytics: StateFlow<Map<Period, AnalyticsState>> = _analytics.asStateFlow()
+
     init {
         refresh()
     }
+
+    /** Загружает курсы за период. Без [force] не перезагружает уже загруженный сегодня период. */
+    fun loadHistory(period: Period, force: Boolean = false) {
+        val current = _analytics.value.getValue(period)
+        val today = today()
+        if (current.loading) return
+        if (!force && current.history != null && current.endDate == today && current.history.problem == null) return
+        updateAnalytics(period) { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            val history = runCatching { repository.history(today, period.days) }
+            updateAnalytics(period) { state ->
+                history.fold(
+                    onSuccess = { state.copy(loading = false, history = it, endDate = today) },
+                    onFailure = { state.copy(loading = false, error = "Не удалось загрузить курсы: ${it.message}") },
+                )
+            }
+        }
+    }
+
+    private fun updateAnalytics(period: Period, change: (AnalyticsState) -> AnalyticsState) =
+        _analytics.update { all -> all + (period to change(all.getValue(period))) }
 
     fun refresh() {
         _converter.update { it.copy(loading = true) }
