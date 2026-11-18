@@ -54,6 +54,24 @@ class StatisticsTest {
     }
 
     @Test
+    fun `small rate pair - trend follows the shown percent`() {
+        // MDL → EUR около 0,0496: изменение 0,00004 в 4 знаках не видно, но это −0,08 %
+        val stats = Statistics.compute(points("0.049600", "0.049560"))!!
+        assertEquals("−0,08 %", Format.percent(stats.percentChange))
+        assertEquals(Trend.DOWN, stats.trend)
+        assertEquals(6, Statistics.displayScale(stats))
+        assertEquals("−0,000040", Format.signedRate(stats.absoluteChange, Statistics.displayScale(stats)))
+    }
+
+    @Test
+    fun `trend agrees with the percent rounded to two decimals`() {
+        // Оба значения показываются как 18,3334, процент 0,00 % — «без изменений»
+        val stats = Statistics.compute(points("18.33335", "18.33344"))!!
+        assertEquals("0,00 %", Format.percent(stats.percentChange))
+        assertEquals(Trend.FLAT, stats.trend)
+    }
+
+    @Test
     fun `points are sorted by date before computing`() {
         val shuffled = points("10", "11", "12").reversed()
         val stats = Statistics.compute(shuffled)!!

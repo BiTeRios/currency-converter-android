@@ -31,9 +31,12 @@ data class PeriodStats(
 )
 
 object Statistics {
-    /** Точность хранения значений и сравнения тенденции — как при показе курса. */
-    const val RATE_SCALE = 4
+    /** Знаков после запятой у процента изменения на экране — по нему же решается тенденция. */
+    const val PERCENT_SCALE = 2
     private const val CALC_SCALE = 8
+
+    /** Сколько знаков показывать у курсов пары: у мелких курсов (меньше 1) — 6, иначе 4. */
+    fun displayScale(stats: PeriodStats): Int = if (stats.max.value < BigDecimal.ONE) 6 else 4
 
     /** Курс пары [from] → [to] на каждую дату, где есть обе валюты. */
     fun series(snapshots: List<RateSnapshot>, from: String, to: String): List<RatePoint> =
@@ -44,8 +47,10 @@ object Statistics {
 
     /**
      * Минимум, максимум, среднее, изменение и тенденция. Для пустого набора — null.
-     * Тенденция определяется по изменению, округлённому до 4 знаков: если на экране
-     * курс в начале и в конце периода одинаковый, это «без изменений».
+     * Тенденция определяется по изменению в процентах, округлённому до 2 знаков, — ровно
+     * так, как процент показан рядом с ней. Поэтому «Без изменений» всегда стоит рядом с
+     * «0,00 %», а рост и падение — рядом с ненулевым процентом того же знака, для пар
+     * с любыми по величине курсами (у MDL→EUR курс около 0,05).
      */
     fun compute(points: List<RatePoint>): PeriodStats? {
         if (points.isEmpty()) return null
@@ -61,7 +66,7 @@ object Statistics {
             change.multiply(BigDecimal(100)).divide(first.value, MathContext.DECIMAL128)
                 .setScale(CALC_SCALE, RoundingMode.HALF_UP)
         }
-        val trend = when (change.setScale(RATE_SCALE, RoundingMode.HALF_UP).signum()) {
+        val trend = when (percent.setScale(PERCENT_SCALE, RoundingMode.HALF_UP).signum()) {
             1 -> Trend.UP
             -1 -> Trend.DOWN
             else -> Trend.FLAT

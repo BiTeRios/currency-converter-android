@@ -25,9 +25,14 @@ class RateCacheStore(private val dir: File) {
     /** Атомарная запись: временный файл + переименование, чтобы не оставить полфайла. */
     fun save(date: LocalDate, xml: ByteArray) {
         dir.mkdirs()
-        val tmp = File(dir, "${fileFor(date).name}.tmp")
-        tmp.writeBytes(xml)
-        Files.move(tmp.toPath(), fileFor(date).toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        // Уникальное имя: конвертер и экран аналитики могут сохранять один день одновременно.
+        val tmp = File.createTempFile("${fileFor(date).name}.", ".tmp", dir)
+        try {
+            tmp.writeBytes(xml)
+            Files.move(tmp.toPath(), fileFor(date).toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } finally {
+            tmp.delete() // после успешного move файла уже нет
+        }
     }
 
     fun delete(date: LocalDate) {

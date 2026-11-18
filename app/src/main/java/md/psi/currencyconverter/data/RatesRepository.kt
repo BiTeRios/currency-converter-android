@@ -14,7 +14,10 @@ import java.util.concurrent.atomic.AtomicReference
 /** Откуда пришли данные: свежий ответ сети или сохранённые на устройстве дни. */
 enum class DataOrigin { NETWORK, DEVICE }
 
-/** Курсы для конвертера. [problem] — почему не удалось обновить (если пришлось взять кэш). */
+/**
+ * Курсы для конвертера. [problem] — почему не удалось обратиться к источнику; если он задан,
+ * показаны сохранённые на устройстве данные.
+ */
 data class LatestRates(
     val snapshot: RateSnapshot,
     val requestedDate: LocalDate,
@@ -22,7 +25,7 @@ data class LatestRates(
     val problem: String? = null,
 )
 
-/** Курсы за период. [missingDates] — дни без данных (нет сети и нет кэша). */
+/** Курсы за период. [missingDates] — дни без данных; [problem] — источник был недоступен. */
 data class RateHistory(
     val snapshots: List<RateSnapshot>,
     val missingDates: List<LocalDate>,
@@ -31,7 +34,9 @@ data class RateHistory(
 
 /**
  * Единая точка доступа к курсам.
- * Сначала смотрит в кэш на устройстве (курс прошедшей даты не меняется), затем в сеть.
+ * Последний день периода всегда сначала запрашивается в сети: так пользователь узнаёт,
+ * что сети нет, даже если всё нужное уже сохранено. Прошедшие дни берутся из кэша на
+ * устройстве (официальный курс прошедшей даты не меняется), недостающие — из сети.
  * Каждый успешный ответ сети сохраняется, поэтому данные переживают перезапуск.
  */
 class RatesRepository(
@@ -43,15 +48,19 @@ class RatesRepository(
 
     /**
      * Курсы на [date] (обычно сегодня). Если за дату курс не публиковался, берётся ближайшая
-     * более ранняя дата (до [MAX_LOOKBACK_DAYS] дней назад). Без сети — последний сохранённый день.
+     * более ранняя дата (до [MAX_LOOKBACK_DAYS] дней назад). Без сети — сохранённый курс
+     * на эту дату или последний сохранённый день, с указанием причины в [LatestRates.problem].
      * @throws NoRatesException нет ни сети, ни сохранённых данных.
      */
     suspend fun latest(date: LocalDate): LatestRates = withContext(io) {
         val offline = AtomicReference<String?>(null)
         for (offset in 0..MAX_LOOKBACK_DAYS) {
             val day = date.minusDays(offset.toLong())
-            val loaded = loadDay(day, offline)
-            if (loaded != null) return@withContext LatestRates(loaded.first, date, loaded.second)
+            val loaded = loadDay(day, offline, networkFirst = true)
+            if (loaded != null) {
+                val (snapshot, origin) = loaded
+                return@withContext LatestRates(snapshot, date, origin, offline.get().takeIf { origin == DataOrigin.DEVICE })
+            }
             if (offline.get() != null) break
         }
         val problem = offline.get()
@@ -74,7 +83,9 @@ class RatesRepository(
         val limiter = Semaphore(maxParallelRequests)
         val dates = (days - 1 downTo 0).map { endDate.minusDays(it.toLong()) }
         val loaded = dates.map { day ->
-            async(io) { limiter.withPermit { day to loadDay(day, offline)?.first } }
+            async(io) {
+                limiter.withPermit { day to loadDay(day, offline, networkFirst = day == endDate)?.first }
+            }
         }.awaitAll()
         RateHistory(
             snapshots = loaded.mapNotNull { it.second }.sortedBy { it.date },
@@ -83,21 +94,30 @@ class RatesRepository(
         )
     }
 
-    /** День из кэша или из сети; null — за этот день данных нет (или нет сети). */
-    private fun loadDay(day: LocalDate, offline: AtomicReference<String?>): Pair<RateSnapshot, DataOrigin>? {
-        cachedSnapshot(day)?.let { return it to DataOrigin.DEVICE }
-        if (offline.get() != null) return null
+    /**
+     * День из сети или кэша; null — за этот день данных нет.
+     * [networkFirst]: сначала сеть, кэш — только если сеть недоступна.
+     */
+    private fun loadDay(
+        day: LocalDate,
+        offline: AtomicReference<String?>,
+        networkFirst: Boolean,
+    ): Pair<RateSnapshot, DataOrigin>? {
+        if (!networkFirst || offline.get() != null) {
+            cachedSnapshot(day)?.let { return it to DataOrigin.DEVICE }
+            if (offline.get() != null) return null
+        }
         val xml = try {
-            source.fetch(day) ?: return null
+            source.fetch(day)
         } catch (e: SourceUnavailableException) {
             offline.compareAndSet(null, e.message ?: "Нет связи с источником")
-            return null
-        }
+            return cachedSnapshot(day)?.let { it to DataOrigin.DEVICE }
+        } ?: return null
         val snapshot = try {
             BnmXmlParser.parse(xml, day)
         } catch (e: InvalidDataException) {
             offline.compareAndSet(null, "Источник вернул некорректные данные")
-            return null
+            return cachedSnapshot(day)?.let { it to DataOrigin.DEVICE }
         }
         if (snapshot.rates.isEmpty()) return null
         runCatching { store.save(snapshot.date, xml) } // не сохранилось — работаем без кэша

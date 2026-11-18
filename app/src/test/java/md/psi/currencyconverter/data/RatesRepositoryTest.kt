@@ -93,14 +93,39 @@ class RatesRepositoryTest {
     }
 
     @Test
-    fun `saved day is used without network`() = runTest {
+    fun `latest asks the network first even if the day is saved`() = runTest {
         val store = RateCacheStore(folder.root)
-        store.save(today, ratesFor(today))
-        val source = FakeSource(emptyMap())
+        store.save(today, ratesFor(today, "18.00"))
+        val source = FakeSource(mapOf(today to ratesFor(today, "18.3383")))
         val result = repository(source, store).latest(today)
 
+        assertEquals(DataOrigin.NETWORK, result.origin)
+        assertEquals(listOf(today), source.calls)
+        assertNull(result.problem)
+    }
+
+    @Test
+    fun `offline with the day saved shows saved data and the reason`() = runTest {
+        val store = RateCacheStore(folder.root)
+        store.save(today, ratesFor(today))
+        val result = repository(FakeSource(mapOf(today to offline)), store).latest(today)
+
         assertEquals(DataOrigin.DEVICE, result.origin)
-        assertTrue(source.calls.isEmpty())
+        assertEquals(today, result.snapshot.date)
+        assertEquals(offline.message, result.problem)
+    }
+
+    @Test
+    fun `fully saved period offline still reports the missing network`() = runTest {
+        val store = RateCacheStore(folder.root)
+        (0L..6L).forEach { store.save(day(it), ratesFor(day(it))) }
+        val source = FakeSource((0L..6L).associate { day(it) to offline })
+
+        val history = repository(source, store).history(today, 7)
+
+        assertEquals(7, history.snapshots.size)
+        assertEquals(offline.message, history.problem)
+        assertEquals("из сети запрашивается только последний день", listOf(today), source.calls)
     }
 
     @Test
