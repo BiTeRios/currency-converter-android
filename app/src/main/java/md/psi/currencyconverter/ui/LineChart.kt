@@ -28,7 +28,7 @@ import md.psi.currencyconverter.domain.RatePoint
  * пунктир среднего значения. Рисуется на Canvas без сторонних библиотек.
  */
 @Composable
-fun LineChart(points: List<RatePoint>, average: Double?, modifier: Modifier = Modifier) {
+fun LineChart(points: List<RatePoint>, average: Double?, scale: Int = 4, modifier: Modifier = Modifier) {
     val lineColor = MaterialTheme.colorScheme.primary
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -53,15 +53,17 @@ fun LineChart(points: List<RatePoint>, average: Double?, modifier: Modifier = Mo
             high += pad
         }
 
-        val maxLabel = measurer.measure(Format.rate(points.maxOf { it.value }), labelStyle)
-        val minLabel = measurer.measure(Format.rate(points.minOf { it.value }), labelStyle)
+        val maxLabel = measurer.measure(Format.rate(points.maxOf { it.value }, scale), labelStyle)
+        val minLabel = measurer.measure(Format.rate(points.minOf { it.value }, scale), labelStyle)
         val left = maxOf(maxLabel.size.width, minLabel.size.width) + 8.dp.toPx()
         val bottom = size.height - 22.dp.toPx()
         val top = 8.dp.toPx()
         val right = size.width - 8.dp.toPx()
 
+        val firstDay = points.first().date.toEpochDay()
+        val span = (points.last().date.toEpochDay() - firstDay).coerceAtLeast(1)
         fun x(index: Int) = if (points.size == 1) (left + right) / 2 else
-            left + (right - left) * index / (points.size - 1)
+            left + (right - left) * (points[index].date.toEpochDay() - firstDay) / span
         fun y(value: Double) = (bottom - (value - low) / (high - low) * (bottom - top)).toFloat()
 
         // Сетка: линии минимума и максимума значений

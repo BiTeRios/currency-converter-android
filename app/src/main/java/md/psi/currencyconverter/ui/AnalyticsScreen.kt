@@ -98,18 +98,21 @@ fun AnalyticsScreen(
 
         when {
             from == to -> Text("Выберите разные валюты: курс валюты к самой себе всегда равен 1.")
-            history == null && state.loading -> Text("Загружаем курсы за ${period.days} дней…")
+            stats == null && state.loading -> Text("Загружаем курсы за ${period.days} дней…")
             stats == null && !state.loading ->
                 Text("Нет данных за период. Подключитесь к интернету и нажмите «Обновить».")
             stats != null -> {
                 Card(Modifier.fillMaxWidth()) {
-                    LineChart(points, stats.average.toDouble(), Modifier.padding(12.dp))
+                    LineChart(points, stats.average.toDouble(), Statistics.displayScale(stats), modifier = Modifier.padding(12.dp))
                 }
                 TrendBanner(stats)
                 StatsGrid(stats, to)
                 Text(
                     "Период: ${Format.date(stats.first.date)} – ${Format.date(stats.last.date)} · " +
-                        "дней с данными: ${stats.count} из ${period.days}\nИсточник: ${BnmApi.SOURCE_NAME}" +
+                        "дней с данными: ${stats.count} из ${period.days}\n" +
+                        "Данные актуальны на ${Format.date(stats.last.date)}" +
+                        (if (history?.problem != null) " (сохранены на устройстве, без сети)" else "") +
+                        "\nИсточник: ${BnmApi.SOURCE_NAME}" +
                         "\nПунктир на графике — среднее значение",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -139,11 +142,12 @@ private fun TrendBanner(stats: PeriodStats) {
 
 @Composable
 private fun StatsGrid(stats: PeriodStats, unit: String) {
+    val scale = Statistics.displayScale(stats)
     val cells = listOf(
-        Triple("Минимум", "${Format.rate(stats.min.value)} $unit", Format.date(stats.min.date)),
-        Triple("Максимум", "${Format.rate(stats.max.value)} $unit", Format.date(stats.max.date)),
-        Triple("Среднее", "${Format.rate(stats.average)} $unit", "за ${stats.count} дн."),
-        Triple("Изменение", "${Format.signedRate(stats.absoluteChange)} $unit", Format.percent(stats.percentChange)),
+        Triple("Минимум", "${Format.rate(stats.min.value, scale)} $unit", Format.date(stats.min.date)),
+        Triple("Максимум", "${Format.rate(stats.max.value, scale)} $unit", Format.date(stats.max.date)),
+        Triple("Среднее", "${Format.rate(stats.average, scale)} $unit", "за ${stats.count} дн."),
+        Triple("Изменение", "${Format.signedRate(stats.absoluteChange, scale)} $unit", Format.percent(stats.percentChange)),
     )
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         cells.chunked(2).forEach { row ->
