@@ -21,6 +21,8 @@ class FormatTest {
         assertEquals("18,3383", Format.rate(BigDecimal("18.3383")))
         assertEquals("0,0545", Format.rate(BigDecimal("0.054530")))
         assertEquals("< 0,0001", Format.rate(BigDecimal("0.00002")))
+        assertEquals("0,049600", Format.rate(BigDecimal("0.0496"), 6))
+        assertEquals("< 0,000001", Format.rate(BigDecimal("0.0000002"), 6))
         assertEquals("+0,2334", Format.signedRate(BigDecimal("0.23340")))
         assertEquals("−0,0500", Format.signedRate(BigDecimal("-0.05")))
         assertEquals("0,0000", Format.signedRate(BigDecimal.ZERO))
