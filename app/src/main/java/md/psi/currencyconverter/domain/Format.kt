@@ -13,14 +13,14 @@ object Format {
 
     fun amount(value: BigDecimal): String = grouped(value.setScale(2, RoundingMode.HALF_UP))
 
-    fun rate(value: BigDecimal): String {
-        val rounded = value.setScale(4, RoundingMode.HALF_UP)
-        return if (rounded.signum() == 0 && value.signum() > 0) "< 0,0001" else grouped(rounded)
+    fun rate(value: BigDecimal, scale: Int = 4): String {
+        val rounded = value.setScale(scale, RoundingMode.HALF_UP)
+        return if (rounded.signum() == 0 && value.signum() > 0) "< " + grouped(BigDecimal.ONE.movePointLeft(scale)) else grouped(rounded)
     }
 
     /** Изменение со знаком: «+0,0123», «−0,0500», «0,0000». */
-    fun signedRate(value: BigDecimal): String {
-        val rounded = value.setScale(4, RoundingMode.HALF_UP)
+    fun signedRate(value: BigDecimal, scale: Int = 4): String {
+        val rounded = value.setScale(scale, RoundingMode.HALF_UP)
         return when (rounded.signum()) {
             1 -> "+" + grouped(rounded)
             -1 -> "−" + grouped(rounded.negate())

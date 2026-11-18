@@ -23,8 +23,10 @@ object BnmXmlParser {
     fun parse(xml: ByteArray, requestedDate: LocalDate): RateSnapshot {
         val root = try {
             val factory = DocumentBuilderFactory.newInstance()
-            // Защита от XXE; не на всех парсерах Android эта настройка есть.
+            // Защита от XXE. Парсер Android может не знать первую настройку,
+            // поэтому дополнительно запрещаем раскрытие сущностей.
             runCatching { factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+            factory.isExpandEntityReferences = false
             factory.newDocumentBuilder().parse(ByteArrayInputStream(xml)).documentElement
         } catch (e: Exception) {
             throw InvalidDataException("Ответ источника не является корректным XML", e)
