@@ -1,8 +1,12 @@
 package md.psi.currencyconverter.data
 
 import java.io.IOException
+import java.net.ConnectException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -27,7 +31,7 @@ class BnmApi(
         val connection = try {
             URL(buildUrl(date)).openConnection() as HttpURLConnection
         } catch (e: IOException) {
-            throw SourceUnavailableException("Нет связи с bnm.md: ${e.message}", e)
+            throw SourceUnavailableException(describe(e), e)
         }
         try {
             connection.connectTimeout = timeoutMs
@@ -42,10 +46,22 @@ class BnmApi(
         } catch (e: SourceUnavailableException) {
             throw e
         } catch (e: IOException) {
-            throw SourceUnavailableException("Нет связи с bnm.md: ${e.message ?: e.javaClass.simpleName}", e)
+            throw SourceUnavailableException(describe(e), e)
+        } catch (e: RuntimeException) {
+            // HttpURLConnection на некоторых устройствах бросает и непроверяемые исключения.
+            throw SourceUnavailableException("Нет связи с bnm.md", e)
         } finally {
             connection.disconnect()
         }
+    }
+
+    /** Понятное сообщение вместо текста исключения Java. */
+    private fun describe(e: IOException): String = when (e) {
+        is UnknownHostException -> "Нет подключения к интернету"
+        is SocketTimeoutException -> "bnm.md не отвечает (истекло время ожидания)"
+        is ConnectException -> "Не удалось подключиться к bnm.md"
+        is SSLException -> "Ошибка защищённого соединения с bnm.md"
+        else -> "Нет связи с bnm.md"
     }
 
     private fun ByteArray.isBlank(): Boolean = all { it.toInt().toChar().isWhitespace() }
