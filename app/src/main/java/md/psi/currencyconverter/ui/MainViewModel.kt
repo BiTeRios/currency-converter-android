@@ -94,6 +94,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _converter.value.copy(loading = false, latest = latest, fatalError = null)
             } catch (e: NoRatesException) {
                 _converter.value.copy(loading = false, fatalError = e.message)
+            } catch (e: Exception) {
+                // Любая непредвиденная ошибка — сообщение, а не падение приложения.
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _converter.value.copy(loading = false, fatalError = "Не удалось загрузить курс: ${e.message ?: e.javaClass.simpleName}")
             }
             _converter.value = recalculate(newState)
         }
