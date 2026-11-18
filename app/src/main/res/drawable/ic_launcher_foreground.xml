@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Две стрелки обмена и линия графика -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M34,42h32l-8,-8l4,-4l15,15l-15,15l-4,-4l8,-8h-32z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M74,66h-32l8,8l-4,4l-15,-15l15,-15l4,4l-8,8h32z" />
+</vector>
