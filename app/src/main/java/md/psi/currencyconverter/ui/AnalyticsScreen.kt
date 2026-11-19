@@ -111,7 +111,7 @@ fun AnalyticsScreen(
                     "Период: ${Format.date(stats.first.date)} – ${Format.date(stats.last.date)} · " +
                         "дней с данными: ${stats.count} из ${period.days}\n" +
                         "Данные актуальны на ${Format.date(stats.last.date)}" +
-                        (if (history?.problem != null) " (сохранены на устройстве, без сети)" else "") +
+                        (if (history?.problem != null) " (часть дней — из сохранённых на устройстве)" else "") +
                         "\nИсточник: ${BnmApi.SOURCE_NAME}" +
                         "\nПунктир на графике — среднее значение",
                     style = MaterialTheme.typography.bodySmall,
