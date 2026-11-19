@@ -60,7 +60,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 .\gradlew test
 ```
 
-44 JUnit-теста, сеть не нужна:
+45 JUnit-тестов, сеть не нужна:
 
 | Набор | Что проверяет |
 |---|---|
