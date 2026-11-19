@@ -56,7 +56,7 @@ class RatesRepository(
         val offline = AtomicReference<String?>(null)
         for (offset in 0..MAX_LOOKBACK_DAYS) {
             val day = date.minusDays(offset.toLong())
-            val loaded = loadDay(day, offline, networkFirst = true)
+            val loaded = loadDay(day, offline, networkFirst = offset == 0)
             if (loaded != null) {
                 val (snapshot, origin) = loaded
                 return@withContext LatestRates(snapshot, date, origin, offline.get().takeIf { origin == DataOrigin.DEVICE })

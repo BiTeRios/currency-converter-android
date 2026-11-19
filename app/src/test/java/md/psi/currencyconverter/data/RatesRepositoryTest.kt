@@ -65,6 +65,19 @@ class RatesRepositoryTest {
     }
 
     @Test
+    fun `earlier days come from the cache, only the requested day from the network`() = runTest {
+        val store = RateCacheStore(folder.root)
+        store.save(day(1), ratesFor(day(1)))
+        val source = FakeSource(emptyMap()) // сегодня не опубликовано (404)
+        val result = repository(source, store).latest(today)
+
+        assertEquals(day(1), result.snapshot.date)
+        assertEquals(DataOrigin.DEVICE, result.origin)
+        assertNull("сеть доступна, проблемы нет", result.problem)
+        assertEquals(listOf(today), source.calls)
+    }
+
+    @Test
     fun `empty ValCurs counts as no data`() = runTest {
         val source = FakeSource(mapOf(today to xml(today.format(ddmm)), day(1) to ratesFor(day(1))))
         assertEquals(day(1), repository(source).latest(today).snapshot.date)
