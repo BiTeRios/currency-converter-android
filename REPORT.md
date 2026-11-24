@@ -1,139 +1,78 @@
-# Отчёт по лабораторной работе №4: мобильное приложение
+# Lab 4 Report — Mobile Currency Converter
 
-## 1. Тема и обоснование
+## 1. Topic and rationale
 
-**Вариант Б:** конвертер валют из лаб 3, перенесённый на Android, с обязательным расширением —
-экранами сравнения за неделю и за месяц. Показатель на экранах сравнения — курс выбранной
-валютной пары.
+Option B brings the Lab 3 currency converter to Android and adds the required weekly and monthly comparison screens. The metric on both screens is the exchange rate for the selected currency pair.
 
-Почему этот вариант: тема не требует отдельного согласования, источник данных (официальный
-курс НБМ) уже изучен в лаб 3 и даёт настоящие исторические данные по каждой дате. Поэтому
-месячный график строится сразу после установки, а не через месяц накопления.
+The National Bank of Moldova was already the Lab 3 data source. Its dated feed supplies historical data, so the app can draw a monthly chart on the first online run.
 
-## 2. Смена языка
+## 2. Language change
 
-| | Язык | Стек |
-|---|---|---|
-| Лаб 3 | **Python 3** | Tkinter, `urllib`, `xml.etree`, `decimal` |
-| Лаб 4 | **Kotlin** | Jetpack Compose, Material 3, корутины, `HttpURLConnection`, DOM-парсер, `BigDecimal` |
+| Lab | Language | Stack |
+| --- | --- | --- |
+| 3 | Python 3 | Tkinter, `urllib`, `xml.etree`, `decimal` |
+| 4 | Kotlin | Jetpack Compose, Material 3, coroutines, `HttpURLConnection`, DOM parsing, `BigDecimal` |
 
-**Код лаб 3 не переиспользован.** Вариант Б — перенос того же продукта, поэтому **требования**
-намеренно оставлены теми же, что в спецификации лаб 3:
+The Kotlin app was implemented independently using the Lab 3 specification. It retains the same amount validation messages, limit of 1,000,000,000,000, two decimal places for amounts, ten-day lookback, round-trip tolerance, and half-up rounding with four decimal places for converter rates.
 
-- тексты сообщений проверки суммы;
-- предел 1 000 000 000 000 и правило «не больше двух знаков после запятой»;
-- откат до 10 дней назад;
-- допуск обратной конвертации;
-- курсы с 4 знаками, округление половины вверх.
+The Android rate model and conversion code were committed before the first application code in the Python repository. The Lab 3 specification was already available.
 
-Это совпадение требований, а не кода. Реализация на Kotlin написана заново и устроена
-по-другому (см. ниже). Перевести с Python было нечего: по хронологии коммитов слой данных и
-логика лаб 4 закоммичены раньше, чем в репозитории лаб 3 появилась первая строка кода
-приложения. Спецификации лаб 3 к тому моменту уже были.
+| Lab and commit | Local time | Change |
+| --- | --- | --- |
+| Lab 4 `98eea15` | 18 Nov 2026, 23:31 | Kotlin rate models and BNM XML parser |
+| Lab 4 `327200d` | 18 Nov 2026, 23:33 | Conversion, amount validation, and formatting |
+| Lab 4 `9df311c` | 18 Nov 2026, 23:38 | Period statistics |
+| Lab 3 `8695705` | 19 Nov 2026, 01:36 | First Python source for `bnm_source`, `converter`, and `gui` |
 
-| Коммит | Время | Что |
-|---|---|---|
-| лаб 4 `98eea15` | 18.11.2026 23:31 | модели курса и разбор XML НБМ на Kotlin |
-| лаб 4 `327200d` | 18.11.2026 23:33 | конвертация, проверка суммы, форматирование |
-| лаб 4 `9df311c` | 18.11.2026 23:38 | статистика периода |
-| лаб 3 `8695705` | 19.11.2026 01:36 | первый код конвертера лаб 3 (`bnm_source`, `converter`, `gui`) |
+| Concern | Lab 3 Python desktop implementation | Lab 4 Kotlin implementation |
+| --- | --- | --- |
+| Cache | Latest rate table in JSON | Raw XML for each saved date |
+| Source unavailable | The user chooses whether to use a saved rate | The app automatically displays available saved data and a notice |
+| Conversion | Button and optional rate date | Changes recalculate immediately using today's rate |
+| Concurrency | Tk event loop and a worker thread with a queue | Coroutines with up to four requests per history load |
+| XML | `xml.etree` | DOM parser from `javax.xml` |
 
-Чем реализации отличаются:
+## 3. Historical data and offline behavior
 
-| | Лаб 3 (Python) | Лаб 4 (Kotlin) |
-|---|---|---|
-| Кэш | одна последняя таблица в JSON | сырой XML на каждую дату, нужен для истории |
-| Сеть без ответа | пользователь сам выбирает сохранённый курс кнопкой | сохранённые данные подставляются сразу, с предупреждением |
-| Конвертация | по кнопке, с полем даты | на лету при каждом изменении, всегда на сегодня |
-| Параллельность | один поток Tk и рабочий поток с очередью | корутины, до 4 запросов истории одновременно |
-| XML | `xml.etree` | DOM-парсер `javax.xml` |
+The repository loads the dates of a seven-day or thirty-day period. It reads historical dates from the device when available, requests missing dates, and attempts a network refresh for the latest day. Each successful response is stored as an XML file for the corresponding snapshot date. [History and cache flow](README.md#history-and-cache)
 
-## 3. Источник исторических данных и его ограничения
+- A first monthly load needs connectivity and can use up to 30 requests, with four running at once. All 30 days were visible in an emulator screenshot taken 15 seconds after opening the tab.
+- When the app has only some of the dates, it shows how many days are available and the date of the latest data.
+- Weekend and holiday dates may repeat the most recent working day's rate. Each returned calendar day has equal weight when the app calculates the average.
+- The app uses today's date in `Europe/Chisinau`. The BNM can publish the following day's rate around 13:00, and the converter continues to show the rate for today.
+- The feed publishes the official exchange rate. Commercial buy and sell rates are outside the scope of the app.
 
-**Выбранный подход** — комбинация: запросы к НБМ по каждой дате периода плюс накопление на
-устройстве.
+## 4. IDE, AI tools, and model
 
-- За 7 дней — 7 запросов, за 30 — 30. Они идут параллельно, не больше 4 одновременно. На
-  эмуляторе все 30 дней были на экране к моменту скриншота, через 15 секунд после открытия
-  вкладки; точное время загрузки не замерялось.
-- Каждый полученный день сохраняется (`files/rates/rates_ГГГГ-ММ-ДД.xml`) и больше не
-  запрашивается, кроме последнего дня периода: его приложение всегда пробует обновить, чтобы
-  заметить отсутствие сети.
+| Work | Tool |
+| --- | --- |
+| Generation of code, tests, README, and original report | Claude Code for Windows with **Claude Opus 5.5** |
+| Independent review | Claude Code reviewer subagent with a separate context and read-only access to the code, plus test execution |
+| Command-line build | Gradle 9.3.1, Android Gradle Plugin 9.1.1, Kotlin 2.3.21 |
+| Runtime checks and screenshots | Pixel 8 Android emulator, API 37, controlled through `adb` |
+| IDE and SDK | Android Studio 2026.2.1 supplied the SDK, emulator, and JDK. The original submission was built and checked through the command line. |
 
-**Ограничения:**
+## 5. Generated code and corrections
 
-1. **Первая загрузка месяца требует сети.** Без сети доступны только ранее сохранённые дни.
-   Экран показывает, сколько дней есть («6 из 7») и на какую дату данные актуальны.
-2. **Выходные и праздники.** НБМ отдаёт за них курс последнего рабочего дня. На графике это
-   горизонтальные участки, и в среднее такие дни входят с весом календарного дня.
-3. **Курс на завтра** НБМ публикует около 13:00. Приложение берёт «сегодня» по времени
-   Кишинёва и курс на завтра не показывает.
-4. **Нет курсов покупки и продажи** — только официальный курс.
-5. **Нагрузка на источник:** до 30 запросов при первом открытии месяца. Повторные открытия
-   берут данные из кэша.
+The original implementation correctly parsed XML denominations, converted through MDL with `BigDecimal`, calculated the period statistics, drew a line chart with Canvas, and applied the three-screen navigation. An emulator check matched a manual calculation of 100 USD = 1,833.83 MDL at a rate of 18.3383.
 
-## 4. IDE, ИИ-инструменты и модели
+| Finding | How it was found | Correction |
+| --- | --- | --- |
+| `compileSdk` was set to 36 while the Compose dependencies required 37 | `checkDebugAarMetadata` failed | Raised `compileSdk` to 37 |
+| The Gradle launcher picked up Java 8 from `PATH` | Gradle reported that it required JVM 17 | Selected the Android Studio JDK and documented the setting |
+| A statistics test expected `1.09900590` | The test failed for a correct result | Corrected the expected value to `1.09900045` |
+| A complete cache hid the fact that the device was offline | Airplane-mode check and review | Attempt a fresh request for the latest day and display a notice when it fails |
+| The offline message exposed a raw Java exception | Emulator screenshot | Map network errors to clear Russian messages |
+| The displayed trend could say flat while showing a nonzero percentage for a small rate | Independent review | Derive the trend from the displayed percentage and use six places for small rates in analytics |
+| An unexpected `RuntimeException` could interrupt loading | Independent review | Show a load error for unexpected exceptions |
+| An index-based chart hid missing calendar days | Independent review | Place points by calendar date |
+| Concurrent writes could share a temporary cache file, and one XML parser feature was unsupported on Android | Independent review | Use unique temporary cache files and disable expansion of entity references |
+| The converter requested dates that were already saved during the lookback | Follow-up review | Prefer the cache for earlier dates and identify that history may contain both live and saved data |
 
-| Что | Чем |
-|---|---|
-| Генерация кода, тестов, README, этого отчёта | Claude Code, приложение для Windows; модель **Claude Opus 5.5** |
-| Независимая проверка кода | субагент-проверяющий Claude Code (отдельный контекст, только чтение и запуск тестов) |
-| Сборка | Gradle 9.3.1 из командной строки, AGP 9.1.1, Kotlin 2.3.21 |
-| Запуск и проверка | эмулятор Android (Pixel 8, API 37) без окна; управление и скриншоты через `adb` |
-| IDE | Android Studio 2026.2.1 установлена и даёт SDK, эмулятор и JDK. Код в ней не правился, и проект в ней **не открывался**: сборка проверена только через Gradle из командной строки. AGP 9.1.1 старше этой версии Studio, поэтому синхронизация должна пройти, но перед защитой проект стоит открыть и запустить в Studio заранее |
+The amount and pair reset if Android terminates the process. A converter left open across midnight updates its rate when the user presses refresh. Trend labels use the percentage rounded to two places, so a very small change can show a flat trend alongside a nonzero absolute difference.
 
-## 5. Что ИИ сгенерировал корректно, а где ошибся
+## 6. Student's reflection
 
-**Сразу правильно** (проверено тестами и на эмуляторе):
+*Reserved for the student's personal reflection.*
 
-- разбор XML НБМ с учётом номинала;
-- конвертация через лей на `BigDecimal`;
-- статистика: минимум, максимум, среднее, процент;
-- график на Canvas без сторонних библиотек;
-- три экрана и навигация.
-
-Живой курс USD→MDL на эмуляторе совпал с расчётом вручную: 100 USD = 1 833,83 MDL при курсе
-18,3383.
-
-**Ошибки и как они найдены:**
-
-| # | Ошибка | Как обнаружена | Исправление |
-|---|---|---|---|
-| 1 | `compileSdk = 36`, а библиотекам Compose BOM 2026.09 нужен 37 | падение сборки на `checkDebugAarMetadata` | `compileSdk = 37` |
-| 2 | Gradle запускался на Java 8 из `PATH` | падение сборки: «Gradle requires JVM 17» | JDK из Android Studio; описано в README |
-| 3 | Неверная ожидаемая константа в тесте статистики: 1,09900590 вместо 1,09900045 | тест упал на правильном коде | исправлен тест |
-| 4 | **В режиме полёта не было признака офлайна**, если все дни уже сохранены: сеть не запрашивалась, и экраны выглядели как онлайн | ручная проверка в режиме полёта на эмуляторе; замечание ревьюера | последний день всегда сначала запрашивается в сети, без сети — плашка с датой данных |
-| 5 | Сообщение без сети содержало сырой текст исключения Java («Unable to resolve host…») | скриншот на эмуляторе | понятные русские сообщения по типу ошибки |
-| 6 | Тенденция противоречила проценту для пар с мелким курсом: «Без изменений −0,08 %» для MDL→EUR | независимая проверка | тенденция по проценту с 2 знаками, курсы меньше 1 — с 6 знаками |
-| 7 | Загрузка курса не перехватывала `RuntimeException` — теоретически возможное падение | независимая проверка | перехват любых ошибок с сообщением |
-| 8 | Ось X графика шла по номеру точки, и пропущенные дни не были видны | независимая проверка | ось по датам |
-| 9 | Мелочи: общий временный файл кэша при одновременной записи, XXE-защита не срабатывает на парсере Android | независимая проверка | уникальный временный файл, `isExpandEntityReferences = false` |
-
-**Известные ограничения, которые оставлены:**
-
-- сумма и пара валют не сохраняются, если система выгрузит процесс (`SavedStateHandle` не
-  используется);
-- при переходе через полночь с открытым приложением данные обновятся только по кнопке
-  «Обновить»; дата данных при этом видна.
-- тенденция определяется по проценту с двумя знаками: при изменении меньше 0,005 % баннер
-  покажет «Без изменений 0,00 %», а ячейка «Изменение» — реальную разницу (например,
-  +0,0007). Так выбрано, чтобы баннер никогда не противоречил показанному проценту.
-
-## 6. Насколько сложнее или проще было работать с ИИ на новом языке
-
-> **Этот раздел — личный вывод студента, его нужно написать самому.** Ниже факты для опоры;
-> они не заменяют вывод.
-
-Факты из этой работы:
-
-- Код на Kotlin ИИ сгенерировал почти так же уверенно, как на Python в лаб 1–3. Больше всего
-  проблем дал не язык, а окружение Android: версия `compileSdk`, требование JDK 17 для
-  Gradle 9, настройки эмулятора. В Python-лабах таких проблем не было.
-- Ошибки на Kotlin были не синтаксическими, а смысловыми: офлайн-индикация, тенденция у
-  мелких курсов. Их нашли запуск на эмуляторе и независимая проверка, а не компилятор.
-- Проверять код на незнакомом языке сложнее: нужно понимать корутины, `StateFlow` и Compose,
-  чтобы ответить на вопросы на защите.
-
-Вопросы, на которые стоит ответить в выводе: что было понятно в сгенерированном коде, а что
-пришлось разбирать; доверяли бы вы этому коду без тестов; что изменилось в том, как вы
-формулируете задачи для ИИ.
+Points the student can draw on include the extra Android build and emulator setup, the role of runtime checks in finding offline and trend issues, and how understanding coroutines, `StateFlow`, and Compose helps explain and verify generated Kotlin code.
