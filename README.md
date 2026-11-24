@@ -1,100 +1,78 @@
-# Курс НБМ — мобильный конвертер валют (Android)
+# NBM Exchange Rates for Android
 
-Лабораторная работа №4 по ПСИ. Конвертер валют по официальному курсу Национального банка
-Молдовы (вариант Б: перенос конвертера из лаб 3 на мобильную платформу) с обязательным
-расширением — экранами сравнения курса за неделю и за месяц.
+Software Engineering Lab 4, option B. This native Android app brings the Lab 3 currency converter to mobile and adds seven-day and thirty-day exchange-rate comparisons. It uses Kotlin, Jetpack Compose, and Material 3 on Android 8.0 and later.
 
-**Язык:** Kotlin (лаб 3 написана на Python). **UI:** Jetpack Compose, Material 3.
-**Платформа:** Android 8.0+ (minSdk 26).
+| Converter | Week | Month |
+| --- | --- | --- |
+| ![Converter showing the result and both rates](docs/screenshots/converter.png) | ![Seven-day rate chart and statistics](docs/screenshots/week.png) | ![Thirty-day rate chart and statistics](docs/screenshots/month.png) |
 
-| Конвертер | Неделя | Месяц |
-|---|---|---|
-| ![Конвертер](docs/screenshots/converter.png) | ![Неделя](docs/screenshots/week.png) | ![Месяц](docs/screenshots/month.png) |
+| Offline converter with cache | Offline weekly view | Offline with an empty cache |
+| --- | --- | --- |
+| ![Converter using a saved rate](docs/screenshots/offline-converter.png) | ![Weekly view using saved days](docs/screenshots/offline-week.png) | ![Converter without saved rates](docs/screenshots/offline-no-cache.png) |
 
-| Без сети, данные сохранены | Неделя без сети | Без сети и без сохранённых данных |
-|---|---|---|
-| ![](docs/screenshots/offline-converter.png) | ![](docs/screenshots/offline-week.png) | ![](docs/screenshots/offline-no-cache.png) |
+## Features
 
-## Возможности
+- Convert as you type, pick or swap currencies, and see the direct and inverse rates. The converter identifies the official rate date and its source.
+- Compare the same currency pair over 7 or 30 calendar days. The chart displays the observed dates and the average. Statistics show the minimum and maximum with their dates, the average, the absolute and percentage change, and the trend.
+- Use previously downloaded data when the source is unavailable. The app explains what happened, shows the latest available date, and offers a retry.
+- The Russian interface follows the Android system light or dark theme.
 
-- **Конвертер:** сумма, выбор валют (41 валюта с русскими названиями), обмен местами,
-  результат с прямым и обратным курсом, дата курса и источник. Пересчёт на лету, проверка
-  ввода с понятными сообщениями.
-- **Неделя / Месяц:** динамика курса выбранной пары за 7 и 30 дней — график, минимум и
-  максимум (с датами), среднее, изменение в единицах и в процентах, тенденция
-  (▲ рост / ▼ падение / ▶ без изменений).
-- **Без сети:** приложение не падает. Показываются сохранённые на устройстве данные с
-  предупреждением, причиной и датой актуальности; кнопка «Повторить».
+## Build and run
 
-## Источник данных
+Open this repository in Android Studio with Android SDK Platform 37 and JDK 17 or later. Select an emulator or a device and choose **Run**. Android Studio records the SDK path in `local.properties`.
 
-Официальная XML-выгрузка НБМ: `https://www.bnm.md/ru/official_exchange_rates?get_xml=1&date=ДД.ММ.ГГГГ`.
-
-Исторические данные: запрос к НБМ по каждой дате периода (параллельно, до 4 запросов) и
-накопление на устройстве — каждый загруженный день сохраняется как XML в
-`files/rates/rates_ГГГГ-ММ-ДД.xml`. Официальный курс прошедшей даты не меняется, поэтому
-сохранённый день повторно не запрашивается. Месячный график доступен сразу после установки,
-если есть сеть, — ждать накопления данных не нужно. Ограничения описаны в [REPORT.md](REPORT.md).
-
-## Сборка и запуск
-
-Нужны Android SDK (platform 37) и JDK 17+. Проще всего — Android Studio: **File → Open** эту
-папку, затем **Run** на эмуляторе или телефоне.
-
-Из командной строки (Windows, PowerShell). Gradle 9 требует Java 17+; если в `PATH` стоит
-Java 8, укажите JDK, встроенный в Android Studio:
+Run the following from the repository root in Windows PowerShell. If `adb` is unavailable on `PATH`, use the executable in the SDK's `platform-tools` directory.
 
 ```powershell
-$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-.\gradlew assembleDebug
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+.\gradlew.bat assembleDebug
 adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
-Путь к SDK берётся из `local.properties` (`sdk.dir=…`), Android Studio создаёт его сам.
+## Architecture
 
-## Тесты
-
-Одна команда (с тем же `JAVA_HOME`):
-
-```powershell
-.\gradlew test
+```mermaid
+flowchart LR
+    UI["Compose screens"] <-->|"UI state and actions"| VM["MainViewModel"]
+    VM --> Repo["RatesRepository"]
+    VM --> Convert["Conversion and amount validation"]
+    UI --> Stats["Period statistics and chart"]
+    Repo --> API["BNM XML client and parser"]
+    Repo <--> Cache["Dated XML files on the device"]
+    API --> NBM["National Bank of Moldova"]
 ```
 
-45 JUnit-тестов, сеть не нужна:
+The app uses the National Bank of Moldova's official rate feed at `https://www.bnm.md/ru/official_exchange_rates?get_xml=1&date=DD.MM.YYYY`. It prefers a network request for the current day and uses cached past dates when available. It can retrieve up to four historical dates at a time, so weekly and monthly views are available after the first online load. Successful responses are stored as `files/rates/rates_YYYY-MM-DD.xml`.
 
-| Набор | Что проверяет |
-|---|---|
-| `BnmXmlParserTest` | разбор настоящего ответа НБМ, номинал (JPY за 100), битые элементы, некорректный XML |
-| `StatisticsTest` | минимум, максимум, среднее, изменение и процент, тенденция, пустой набор, один день |
-| `AmountInputTest` | проверка ввода: допустимые форматы, пустое поле, буквы, ноль, минус, лишние знаки |
-| `CurrencyConverterTest` | USD↔MDL, кросс-курс с номиналом, та же валюта, обратная конвертация всех пар |
-| `FormatTest` | разряды, запятая, проценты, даты |
-| `RatesRepositoryTest` | откат на ранние даты, работа без сети, сохранённые дни, история, битый кэш |
+### History and cache
 
-## Как проверить работу без сети
+```mermaid
+flowchart TD
+    A["Request the current rate or a history date"] --> B{"Requested day is historical and saved?"}
+    B -->|Yes| C["Read the dated XML file"]
+    B -->|No| D["Request the date from BNM"]
+    D -->|"Valid XML"| E["Parse and save the snapshot"]
+    D -->|"Publication missing"| F["Look back for the converter or leave a gap in history"]
+    D -->|"Network or XML error"| G{"Saved rates available?"}
+    G -->|Yes| H["Show available saved rates and a notice"]
+    G -->|No| I["Show the empty state and retry action"]
+    C --> J["Update conversion or period statistics"]
+    E --> J
+    H --> J
+```
 
-1. Запустить приложение с сетью, открыть вкладки «Неделя» и «Месяц» — дни сохранятся.
-2. Включить режим полёта, закрыть и снова открыть приложение.
-3. Конвертер и экраны сравнения работают на сохранённых данных; жёлтая плашка сообщает
-   «Нет подключения к интернету» и дату, на которую данные актуальны.
-4. Сбросить данные приложения (Настройки → Приложения → Курс НБМ → Очистить хранилище) в
-   режиме полёта — приложение не падает и сообщает, что сохранённых курсов нет.
+## Tests
 
-## Устройство
+```powershell
+.\gradlew.bat test
+```
 
-| Пакет / файл | Назначение |
-|---|---|
-| `data/BnmApi.kt` | HTTP-клиент НБМ: 404 — курс не опубликован, тайм-аут 10 с, понятные сообщения об ошибках |
-| `data/BnmXmlParser.kt` | Разбор XML в `RateSnapshot` |
-| `data/RateCacheStore.kt` | Кэш по датам на устройстве, атомарная запись |
-| `data/RatesRepository.kt` | Курс на дату с откатом до 10 дней, история за период, работа без сети |
-| `domain/CurrencyConverter.kt` | Конвертация через лей на `BigDecimal` |
-| `domain/Statistics.kt` | Статистика периода и тенденция |
-| `domain/AmountInput.kt`, `domain/Format.kt` | Проверка ввода, форматирование по-русски |
-| `ui/` | ViewModel, экраны Compose, график на Canvas |
+The 45 local JUnit tests run without network access. They cover XML parsing and currency denominations, decimal conversion and round trips, amount validation, formatting, statistics, date fallback, saved history, and damaged cache files.
 
-## Git
+To check offline behavior on an emulator, first open the converter, week, and month with connectivity. Enable airplane mode and relaunch the app. The saved rates and charts should remain available with the date and retry action. For the empty-cache case, repeat the check with a fresh installation on a test emulator.
 
-Каждый этап — отдельная ветка, слияние в `main` только через Pull Request:
-`setup/project-skeleton` → `feature/data-layer` → `feature/converter-screen` →
-`feature/analytics-screens` → `test/unit-tests` → `fix/review-findings` → `docs/report`.
+## Lab report
+
+The report covers the move from Python to Kotlin, the historical data source, the development tools and AI model, and the corrections made after review. [Lab 4 report](REPORT.md)
+
+The original development stages were merged through pull requests, from project setup and the data layer through conversion, analytics, testing, review fixes, and documentation.
